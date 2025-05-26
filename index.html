@@ -156,6 +156,10 @@
                     <button class="btn btn-ghost btn-xs" onclick="this.parentElement.parentElement.remove()">제거</button>
                 `;
                 drawIdList.appendChild(li);
+                // 이름순 정렬
+                const items = Array.from(drawIdList.children);
+                items.sort((a, b) => a.querySelector('span').textContent.localeCompare(b.querySelector('span').textContent));
+                items.forEach(item => drawIdList.appendChild(item));
             };
 
             // 전체추가
@@ -175,6 +179,10 @@
                                 drawIdList.appendChild(li);
                             }
                         });
+                        // 이름순 정렬
+                        const items = Array.from(drawIdList.children);
+                        items.sort((a, b) => a.querySelector('span').textContent.localeCompare(b.querySelector('span').textContent));
+                        items.forEach(item => drawIdList.appendChild(item));
                     }
                 });
             };
