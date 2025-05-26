@@ -106,7 +106,7 @@
                             data = { participants: defaultIds };
                         }
                         baseIdList.innerHTML = '';
-                        (data.participants || []).forEach((id, idx) => {
+                        (data.participants || []).sort().forEach((id, idx) => {
                             const li = document.createElement('li');
                             li.className = 'flex items-center justify-between py-2 px-3 rounded-lg hover:bg-base-200 group transition';
                             li.innerHTML = `
