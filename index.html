@@ -18,11 +18,25 @@
         .modal-bg { background: rgba(0,0,0,0.18); }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes pop {
+            0% { transform: scale(0.7); }
+            80% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body data-theme="dracula" class="bg-base-200 min-h-screen">
-    <div class="max-w-3xl mx-auto py-8 px-4">
-        <h1 class="text-3xl md:text-4xl font-bold text-center text-primary mb-8 tracking-tight">대장길드 랜덤 뽑기</h1>
+    <div class="max-w-3xl mx-auto py-4 px-4">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-center text-primary tracking-tight">대장길드 랜덤 뽑기</h1>
+            <div>
+                <button id="adminButton" class="btn btn-outline-primary" onclick="setAdmin()">🔐 관리자 설정</button>
+                <span id="authInfo" style="display:none;">
+                    <span class="badge bg-success text-black">관리자 로그인됨</span>
+                    <button class="btn btn-outline-danger btn-sm" onclick="logout()">로그아웃</button>
+                </span>
+            </div>
+        </div>
         <div class="flex flex-col md:flex-row gap-6 mb-8">
             <!-- 기본 아이디 목록 -->
             <div class="flex-1 bg-base-100 rounded-2xl shadow-xl p-5 flex flex-col">
@@ -45,6 +59,59 @@
                 <button class="btn btn-primary text-lg font-bold px-6" id="drawBtn">추첨하기</button>
             </div>
             <div id="result" class="min-h-[2.5rem] text-center text-base-content text-lg font-semibold py-2"></div>
+        </div>
+    </div>
+
+    <!-- 입력 내역 표시 영역 -->
+    <div class="max-w-3xl mx-auto py-4 px-4">
+        <div class="bg-base-100 rounded-2xl shadow-xl p-6">
+            <h2 class="text-2xl font-bold mb-4 text-primary">분배 내역</h2>
+            <div class="overflow-x-auto">
+                <table class="table w-full">
+                    <thead>
+                        <tr>
+                            <th class="text-center">날짜</th>
+                            <th class="text-center">닉네임</th>
+                            <th class="text-center">아이템</th>
+                            <th class="text-center" id="actionColumn" style="display: none;">작업</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminInputList" class="text-center">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 분배 내역 입력 폼 -->
+    <div id="distributionInputForm" class="max-w-3xl mx-auto py-4 px-4" style="display: none;">
+        <div class="bg-base-100 rounded-2xl shadow-xl p-6">
+            <h2 class="text-2xl font-bold mb-4 text-primary">분배 내역 입력</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">날짜</span>
+                    </label>
+                    <input type="date" id="distributionDate" class="input input-bordered" style="appearance: none; -webkit-appearance: none;">
+                </div>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">닉네임</span>
+                    </label>
+                    <select id="distributionNickname" class="input input-bordered">
+                        <option value="">닉네임 선택</option>
+                    </select>
+                </div>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">아이템</span>
+                    </label>
+                    <input type="text" id="distributionItem" class="input input-bordered" placeholder="아이템 입력">
+                </div>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button class="btn btn-primary" onclick="saveDistributionInput()">저장</button>
+            </div>
         </div>
     </div>
 
@@ -84,210 +151,386 @@
             "빠루대장", "입딜대장", "가챠대장", "내가대장", "향기대장"
         ];
 
-        document.addEventListener('DOMContentLoaded', async function() {
+        // 전역 함수들
+        window.initializeAndDisplayDefaultIds = async function() {
             const baseIdList = document.getElementById('baseIdList');
-            const drawIdList = document.getElementById('drawIdList');
-            const drawBtn = document.getElementById('drawBtn');
-            const countInput = document.getElementById('count');
             const resultDiv = document.getElementById('result');
+            try {
+                const snapshot = await db.ref('randomDrawLists/defaultIds').once('value');
+                let data = snapshot.val();
+                if (!data) {
+                    await db.ref('randomDrawLists/defaultIds').set({
+                        name: '기본 아이디 목록',
+                        participants: defaultIds,
+                        type: 'randomDraw',
+                        createdAt: Date.now()
+                    });
+                    data = { participants: defaultIds };
+                }
+                baseIdList.innerHTML = '';
+                (data.participants || []).sort().forEach((id) => {
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center justify-between py-2 px-3 rounded-lg hover:bg-base-200 group transition';
+                    const isAdmin = localStorage.getItem("admin") === "dogfightda@gmail.com";
+                    li.innerHTML = `
+                        <span class="text-base-content">${id}</span>
+                        <div class="flex gap-2">
+                            <button class="btn btn-success btn-xs" onclick="addToDrawList('${id}')">추가</button>
+                            ${isAdmin ? `<button class="btn btn-error btn-xs" onclick="removeBaseId('${id}')">ID 삭제</button>` : ''}
+                        </div>
+                    `;
+                    baseIdList.appendChild(li);
+                });
+                // [신규 아이디 추가] 버튼
+                const isAdmin = localStorage.getItem("admin") === "dogfightda@gmail.com";
+                if (isAdmin) {
+                    const addBtnLi = document.createElement('li');
+                    addBtnLi.className = 'py-2 px-3 text-center';
+                    addBtnLi.innerHTML = `<button class="btn btn-primary btn-sm w-full" onclick="openAddIdModal()">+ 신규 아이디 추가</button>`;
+                    baseIdList.appendChild(addBtnLi);
+                }
+            } catch (error) {
+                console.error('기본 아이디 목록 로드 오류:', error);
+                resultDiv.textContent = '기본 아이디 목록을 불러오는데 실패했습니다. 오류: ' + error.message;
+                resultDiv.className = 'text-error text-center py-2';
+            }
+        };
 
-            // 기본 아이디 목록 초기화 및 표시
-            async function initializeAndDisplayDefaultIds() {
-                try {
-                    db.ref('randomDrawLists/defaultIds').once('value', async (snapshot) => {
-                        let data = snapshot.val();
-                        if (!data) {
-                            await db.ref('randomDrawLists/defaultIds').set({
-                                name: '기본 아이디 목록',
-                                participants: defaultIds,
-                                type: 'randomDraw',
-                                createdAt: Date.now()
-                            });
-                            data = { participants: defaultIds };
-                        }
-                        baseIdList.innerHTML = '';
-                        (data.participants || []).sort().forEach((id, idx) => {
+        window.removeBaseId = async function(id) {
+            if (!confirm('정말로 이 ID를 삭제하시겠습니까?')) return;
+            try {
+                const snapshot = await db.ref('randomDrawLists/defaultIds').once('value');
+                let data = snapshot.val();
+                if (data && data.participants) {
+                    data.participants = data.participants.filter(item => item !== id);
+                    await db.ref('randomDrawLists/defaultIds').update({
+                        participants: data.participants
+                    });
+                    await window.initializeAndDisplayDefaultIds();
+                    await window.refreshDistributionNicknameOptions();
+                }
+            } catch (error) {
+                console.error('ID 삭제 오류:', error);
+                alert('ID 삭제 중 오류가 발생했습니다.');
+            }
+        };
+
+        window.addToDrawList = function(id) {
+            const drawIdList = document.getElementById('drawIdList');
+            const current = Array.from(drawIdList.children).map(li => li.querySelector('span').textContent);
+            if (current.includes(id)) return;
+            const li = document.createElement('li');
+            li.className = 'flex items-center justify-between py-2 px-3 rounded-lg hover:bg-base-200 group transition';
+            li.innerHTML = `
+                <span class="text-base-content">${id}</span>
+                <button class="btn btn-ghost btn-xs" onclick="removeDrawId(this)">제거</button>
+            `;
+            drawIdList.appendChild(li);
+            // 이름순 정렬
+            const items = Array.from(drawIdList.children);
+            items.sort((a, b) => a.querySelector('span').textContent.localeCompare(b.querySelector('span').textContent));
+            items.forEach(item => drawIdList.appendChild(item));
+        };
+
+        window.addAllBaseIdsToDrawList = async function() {
+            const drawIdList = document.getElementById('drawIdList');
+            try {
+                const snapshot = await db.ref('randomDrawLists/defaultIds').once('value');
+                let data = snapshot.val();
+                if (data && data.participants) {
+                    const current = Array.from(drawIdList.children).map(li => li.querySelector('span').textContent);
+                    data.participants.forEach(id => {
+                        if (!current.includes(id)) {
                             const li = document.createElement('li');
                             li.className = 'flex items-center justify-between py-2 px-3 rounded-lg hover:bg-base-200 group transition';
                             li.innerHTML = `
                                 <span class="text-base-content">${id}</span>
-                                <div class="flex gap-2">
-                                    <button class="btn btn-success btn-xs" onclick="addToDrawList('${id}')">추가</button>
-                                    <button class="btn btn-error btn-xs" onclick="removeBaseId(${idx})">ID 삭제</button>
-                                </div>
+                                <button class="btn btn-ghost btn-xs" onclick="removeDrawId(this)">제거</button>
                             `;
-                            baseIdList.appendChild(li);
-                        });
-                        // [신규 아이디 추가] 버튼
-                        const addBtnLi = document.createElement('li');
-                        addBtnLi.className = 'py-2 px-3 text-center';
-                        addBtnLi.innerHTML = `<button class="btn btn-primary btn-sm w-full" onclick="openAddIdModal()">+ 신규 아이디 추가</button>`;
-                        baseIdList.appendChild(addBtnLi);
+                            drawIdList.appendChild(li);
+                        }
                     });
-                } catch (error) {
-                    resultDiv.textContent = '기본 아이디 목록을 불러오는데 실패했습니다. 오류: ' + error.message;
-                    resultDiv.className = 'text-error text-center py-2';
+                    // 이름순 정렬
+                    const items = Array.from(drawIdList.children);
+                    items.sort((a, b) => a.querySelector('span').textContent.localeCompare(b.querySelector('span').textContent));
+                    items.forEach(item => drawIdList.appendChild(item));
                 }
+            } catch (error) {
+                console.error('전체 추가 오류:', error);
+                alert('전체 추가 중 오류가 발생했습니다.');
+            }
+        };
+
+        // 관리자 설정 함수
+        window.setAdmin = function() {
+            const email = prompt("관리자 이메일:");
+            const password = prompt("비밀번호:");
+            if (email === "dogfightda@gmail.com" && password === "0716") {
+                localStorage.setItem("admin", email);
+                alert("관리자 인증 성공!");
+                checkAdmin();
+                window.location.reload();
+            } else {
+                alert("인증 실패");
+            }
+        };
+
+        // 로그아웃 함수
+        window.logout = function() {
+            localStorage.removeItem("admin");
+            alert("로그아웃 완료");
+            checkAdmin();
+            window.location.reload();
+        };
+
+        // 관리자 상태 확인
+        function checkAdmin() {
+            const adminButton = document.getElementById("adminButton");
+            const authInfo = document.getElementById("authInfo");
+            const distributionInputForm = document.getElementById("distributionInputForm");
+            const isAdmin = localStorage.getItem("admin") === "dogfightda@gmail.com";
+            adminButton.style.display = isAdmin ? "none" : "inline-block";
+            authInfo.style.display = isAdmin ? "inline-block" : "none";
+            distributionInputForm.style.display = isAdmin ? "block" : "none";
+        }
+
+        // 분배 내역 저장
+        window.saveDistributionInput = async function() {
+            const date = document.getElementById('distributionDate').value;
+            const nickname = document.getElementById('distributionNickname').value;
+            const item = document.getElementById('distributionItem').value;
+
+            if (!date || !nickname || !item) {
+                alert('모든 필드를 입력해주세요!');
+                return;
             }
 
-            // 기본 아이디 삭제 함수
-            window.removeBaseId = async function(idx) {
-                if (!confirm('정말로 이 ID를 삭제하시겠습니까?')) return;
-                db.ref('randomDrawLists/defaultIds').once('value', async (snapshot) => {
-                    let data = snapshot.val();
-                    if (data && data.participants) {
-                        data.participants.splice(idx, 1);
-                        await db.ref('randomDrawLists/defaultIds').update({
-                            participants: data.participants
-                        });
-                        initializeAndDisplayDefaultIds();
-                    }
-                });
-            };
+            try {
+                const newInput = {
+                    date,
+                    nickname,
+                    item,
+                    timestamp: Date.now()
+                };
 
-            // 뽑기 대상 목록에 추가 (중복 방지)
-            window.addToDrawList = function(id) {
-                const current = Array.from(drawIdList.children).map(li => li.querySelector('span').textContent);
-                if (current.includes(id)) return;
-                const li = document.createElement('li');
-                li.className = 'flex items-center justify-between py-2 px-3 rounded-lg hover:bg-base-200 group transition';
-                li.innerHTML = `
-                    <span class="text-base-content">${id}</span>
-                    <button class="btn btn-ghost btn-xs" onclick="this.parentElement.parentElement.remove()">제거</button>
-                `;
-                drawIdList.appendChild(li);
-                // 이름순 정렬
-                const items = Array.from(drawIdList.children);
-                items.sort((a, b) => a.querySelector('span').textContent.localeCompare(b.querySelector('span').textContent));
-                items.forEach(item => drawIdList.appendChild(item));
-            };
+                await db.ref('randomDrawLists/distributionInputs').push(newInput);
+                
+                // 입력 필드 초기화
+                document.getElementById('distributionDate').value = '';
+                document.getElementById('distributionNickname').value = '';
+                document.getElementById('distributionItem').value = '';
 
-            // 전체추가
-            window.addAllBaseIdsToDrawList = function() {
-                db.ref('randomDrawLists/defaultIds').once('value', (snapshot) => {
-                    let data = snapshot.val();
-                    if (data && data.participants) {
-                        const current = Array.from(drawIdList.children).map(li => li.querySelector('span').textContent);
-                        data.participants.forEach(id => {
-                            if (!current.includes(id)) {
-                                const li = document.createElement('li');
-                                li.className = 'flex items-center justify-between py-2 px-3 rounded-lg hover:bg-base-200 group transition';
-                                li.innerHTML = `
-                                    <span class="text-base-content">${id}</span>
-                                    <button class="btn btn-ghost btn-xs" onclick="this.parentElement.parentElement.remove()">제거</button>
-                                `;
-                                drawIdList.appendChild(li);
-                            }
-                        });
-                        // 이름순 정렬
-                        const items = Array.from(drawIdList.children);
-                        items.sort((a, b) => a.querySelector('span').textContent.localeCompare(b.querySelector('span').textContent));
-                        items.forEach(item => drawIdList.appendChild(item));
-                    }
-                });
-            };
+                // 목록 새로고침
+                await loadDistributionInputs();
+            } catch (error) {
+                console.error('저장 중 오류:', error);
+                alert('저장 중 오류가 발생했습니다: ' + error.message);
+            }
+        };
 
-            // 모달 열기/닫기
-            window.openAddIdModal = function() {
-                document.getElementById('addIdModal').classList.remove('hidden');
-                document.getElementById('addIdModal').classList.add('flex');
-                setTimeout(() => { document.getElementById('modalNewId').focus(); }, 100);
-            };
-            window.closeAddIdModal = function() {
-                document.getElementById('addIdModal').classList.add('hidden');
-                document.getElementById('addIdModal').classList.remove('flex');
-            };
-            // 모달에서 아이디 추가
-            window.addNewIdFromModal = function() {
-                const newId = document.getElementById('modalNewId').value.trim();
-                if (!newId) return alert('아이디를 입력하세요!');
-                db.ref('randomDrawLists/defaultIds').once('value', async (snapshot) => {
-                    let data = snapshot.val();
-                    let updatedParticipants = [];
-                    if (data && data.participants) {
-                        if (data.participants.includes(newId)) {
-                            alert('이미 존재하는 ID입니다!');
-                            return;
-                        }
-                        updatedParticipants = [...data.participants, newId];
-                    } else {
-                        if (defaultIds.includes(newId)) {
-                            alert('이미 존재하는 ID입니다!');
-                            return;
-                        }
-                        updatedParticipants = [...defaultIds, newId];
-                    }
-                    await db.ref('randomDrawLists/defaultIds').update({
-                        participants: updatedParticipants
+        // 분배 내역 목록 로드
+        window.loadDistributionInputs = async function() {
+            const inputList = document.getElementById('adminInputList');
+            const actionColumn = document.getElementById('actionColumn');
+            const isAdmin = localStorage.getItem("admin") === "dogfightda@gmail.com";
+            
+            try {
+                const snapshot = await db.ref('randomDrawLists/distributionInputs').once('value');
+                const inputs = snapshot.val() || {};
+                
+                inputList.innerHTML = '';
+                actionColumn.style.display = isAdmin ? 'table-cell' : 'none';
+                
+                Object.entries(inputs)
+                    .sort((a, b) => b[1].timestamp - a[1].timestamp)
+                    .forEach(([key, data]) => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-base-200 transition-colors';
+                        tr.innerHTML = `
+                            <td class="font-medium">${data.date}</td>
+                            <td>${data.nickname}</td>
+                            <td>${data.item}</td>
+                            ${isAdmin ? `
+                                <td>
+                                    <button class="btn btn-error btn-xs" onclick="deleteDistributionInput('${key}')">삭제</button>
+                                </td>
+                            ` : ''}
+                        `;
+                        inputList.appendChild(tr);
                     });
-                    closeAddIdModal();
-                    initializeAndDisplayDefaultIds();
+
+                if (Object.keys(inputs).length === 0) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td colspan="${isAdmin ? '4' : '3'}" class="text-center py-4 text-base-content/60">
+                            입력된 내역이 없습니다.
+                        </td>
+                    `;
+                    inputList.appendChild(tr);
+                }
+            } catch (error) {
+                console.error('데이터 로드 중 오류:', error);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td colspan="${isAdmin ? '4' : '3'}" class="text-center py-4 text-error">
+                        데이터를 불러오는 중 오류가 발생했습니다.
+                    </td>
+                `;
+                inputList.appendChild(tr);
+            }
+        };
+
+        // 분배 내역 삭제
+        window.deleteDistributionInput = async function(key) {
+            if (!confirm('정말로 이 항목을 삭제하시겠습니까?')) return;
+            
+            try {
+                await db.ref(`randomDrawLists/distributionInputs/${key}`).remove();
+                await loadDistributionInputs();
+            } catch (error) {
+                console.error('삭제 중 오류:', error);
+                alert('삭제 중 오류가 발생했습니다: ' + error.message);
+            }
+        };
+
+        // 신규 아이디 추가 모달 열기
+        window.openAddIdModal = function() {
+            document.getElementById('addIdModal').classList.remove('hidden');
+            document.getElementById('addIdModal').classList.add('flex');
+            document.getElementById('modalNewId').focus();
+        };
+        // 신규 아이디 추가 모달 닫기
+        window.closeAddIdModal = function() {
+            document.getElementById('addIdModal').classList.add('hidden');
+            document.getElementById('addIdModal').classList.remove('flex');
+            document.getElementById('modalNewId').value = '';
+        };
+
+        // 닉네임 드롭다운 옵션 갱신 함수
+        window.refreshDistributionNicknameOptions = async function() {
+            const nicknameSelect = document.getElementById('distributionNickname');
+            if (!nicknameSelect) return;
+            nicknameSelect.innerHTML = '<option value="">닉네임 선택</option>';
+            try {
+                const snapshot = await db.ref('randomDrawLists/defaultIds').once('value');
+                let data = snapshot.val();
+                let ids = (data && data.participants) ? data.participants : window.defaultIds;
+                ids.sort().forEach(id => {
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.textContent = id;
+                    nicknameSelect.appendChild(option);
                 });
-            };
+            } catch (e) {
+                window.defaultIds.sort().forEach(id => {
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.textContent = id;
+                    nicknameSelect.appendChild(option);
+                });
+            }
+        };
+
+        // 신규 아이디 추가 함수
+        window.addNewIdFromModal = async function() {
+            const input = document.getElementById('modalNewId');
+            const newId = input.value.trim();
+            if (!newId) {
+                alert('아이디를 입력하세요.');
+                return;
+            }
+            try {
+                // 기존 목록 불러오기
+                const snapshot = await db.ref('randomDrawLists/defaultIds').once('value');
+                let data = snapshot.val();
+                let ids = (data && data.participants) ? data.participants : window.defaultIds;
+                if (ids.includes(newId)) {
+                    alert('이미 존재하는 아이디입니다.');
+                    return;
+                }
+                ids.push(newId);
+                await db.ref('randomDrawLists/defaultIds').update({ participants: ids });
+                await window.initializeAndDisplayDefaultIds();
+                await window.refreshDistributionNicknameOptions();
+                window.closeAddIdModal();
+            } catch (e) {
+                alert('추가 중 오류가 발생했습니다.');
+                console.error(e);
+            }
+        };
+
+        // 추첨 함수 (주황색, 순차 애니메이션, 결과 강조)
+        window.drawRandom = function() {
+            const count = parseInt(document.getElementById('count').value, 10);
+            const drawIdList = document.getElementById('drawIdList');
+            const ids = Array.from(drawIdList.children).map(li => li.querySelector('span').textContent);
+            const resultDiv = document.getElementById('result');
+
+            if (ids.length === 0) {
+                resultDiv.textContent = '뽑기 대상이 없습니다.';
+                resultDiv.style = '';
+                return;
+            }
+            if (isNaN(count) || count < 1 || count > ids.length) {
+                resultDiv.textContent = '올바른 인원 수를 입력하세요.';
+                resultDiv.style = '';
+                return;
+            }
+
+            // 추첨 대상 섞기
+            const shuffled = [...ids].sort(() => Math.random() - 0.5);
+            const winners = shuffled.slice(0, count);
+            resultDiv.className = 'text-accent text-center py-2 font-bold';
+
+            // 여러 명 뽑을 때 한 명씩 순차적으로 애니메이션
+            async function animateDraw(names, winnerList) {
+                let resultHTML = '';
+                for (let i = 0; i < winnerList.length; i++) {
+                    await new Promise(resolve => {
+                        let t = 0;
+                        const duration = 900 + Math.random() * 600; // 0.9~1.5초
+                        let lastName = '';
+                        const interval = setInterval(() => {
+                            lastName = names[Math.floor(Math.random() * names.length)];
+                            resultDiv.innerHTML = resultHTML + `<span class='inline-block text-2xl md:text-3xl text-accent font-extrabold animate-pulse' style='color:#ff9800;'>${lastName}</span>`;
+                        }, 50);
+                        setTimeout(() => {
+                            clearInterval(interval);
+                            resultHTML += `<span class='block text-2xl md:text-3xl text-accent font-extrabold mb-1' style='color:#ff9800; animation:pop 0.5s;'>${winnerList[i]}</span>`;
+                            resultDiv.innerHTML = resultHTML;
+                            setTimeout(resolve, 350);
+                        }, duration);
+                    });
+                }
+                if (winnerList.length === 1) {
+                    resultDiv.innerHTML = `당첨자: <span class='text-accent font-extrabold text-2xl md:text-3xl' style='color:#ff9800; animation:pop 0.5s;'>${winnerList[0]}</span>`;
+                } else {
+                    resultDiv.innerHTML = `당첨자:<br>` + winnerList.map(w => `<span class='block text-accent font-extrabold text-2xl md:text-3xl' style='color:#ff9800; animation:pop 0.5s;'>${w}</span>`).join('');
+                }
+            }
+            animateDraw(ids, winners);
+        };
+
+        // 뽑기 대상 목록에서 아이디 제거 함수
+        window.removeDrawId = function(btn) {
+            btn.closest('li').remove();
+        };
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            // 닉네임 드롭다운에 기본 아이디 목록 채우기
+            await window.refreshDistributionNicknameOptions();
             // 엔터키로도 추가
             document.getElementById('modalNewId').addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
-                    window.addNewIdFromModal();
+                    addNewIdFromModal();
                 }
-            });
-
-            // 추첨하기
-            drawBtn.addEventListener('click', async function() {
-                const count = parseInt(countInput.value);
-                const participants = Array.from(drawIdList.children).map(li => li.querySelector('span').textContent);
-
-                if (participants.length === 0) {
-                    resultDiv.textContent = '뽑기 대상 목록이 비어있습니다!';
-                    resultDiv.className = 'text-error text-center py-2';
-                    return;
-                }
-                if (isNaN(count) || count <= 0) {
-                    resultDiv.textContent = '유효한 인원 수를 입력해주세요!';
-                    resultDiv.className = 'text-error text-center py-2';
-                    return;
-                }
-                if (count > participants.length) {
-                    resultDiv.textContent = '뽑을 인원 수가 대상 수보다 많습니다!';
-                    resultDiv.className = 'text-error text-center py-2';
-                    return;
-                }
-
-                // 애니메이션: 이름이 빠르게 섞이면서 돌다가 멈춤
-                const shuffled = [...participants].sort(() => Math.random() - 0.5);
-                const winners = shuffled.slice(0, count);
-                resultDiv.className = 'text-primary text-center py-2 font-bold';
-
-                // 여러 명 뽑을 때 한 명씩 순차적으로 애니메이션
-                async function animateDraw(names, winnerList) {
-                    let resultHTML = '';
-                    for (let i = 0; i < winnerList.length; i++) {
-                        await new Promise(resolve => {
-                            let t = 0;
-                            const duration = 900 + Math.random() * 600; // 0.9~1.5초
-                            let lastName = '';
-                            const interval = setInterval(() => {
-                                lastName = names[Math.floor(Math.random() * names.length)];
-                                resultDiv.innerHTML = resultHTML + `<span class='inline-block text-2xl animate-pulse'>${lastName}</span>`;
-                            }, 50);
-                            setTimeout(() => {
-                                clearInterval(interval);
-                                resultHTML += `<span class='block text-2xl md:text-3xl text-accent font-extrabold mb-1'>${winnerList[i]}</span>`;
-                                resultDiv.innerHTML = resultHTML;
-                                setTimeout(resolve, 350);
-                            }, duration);
-                        });
-                    }
-                    if (winnerList.length === 1) {
-                        resultDiv.innerHTML = `당첨자: <span class='text-accent font-extrabold text-2xl md:text-3xl'>${winnerList[0]}</span>`;
-                    } else {
-                        resultDiv.innerHTML = `당첨자:<br>` + winnerList.map(w => `<span class='block text-accent font-extrabold text-2xl md:text-3xl'>${w}</span>`).join('');
-                    }
-                }
-                animateDraw(participants, winners);
             });
 
             // 초기화 실행
-            await initializeAndDisplayDefaultIds();
+            checkAdmin();
+            await window.initializeAndDisplayDefaultIds();
+            await loadDistributionInputs();
+            document.getElementById('drawBtn').addEventListener('click', window.drawRandom);
         });
     </script>
 </body>
