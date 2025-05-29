@@ -14,8 +14,14 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
-        body { font-family: 'Pretendard', sans-serif; }
-        .modal-bg { background: rgba(0,0,0,0.18); }
+        body {
+            background: #23272b;
+            color: #f8f9fa;
+            font-family: 'Pretendard', sans-serif;
+        }
+        .modal-bg {
+            background: rgba(40, 44, 52, 0.85);
+        }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes pop {
@@ -23,9 +29,101 @@
             80% { transform: scale(1.2); }
             100% { transform: scale(1); }
         }
+        .bg-base-100, .card, .modal-bg, .table {
+            background: #343a40 !important;
+            color: #f8f9fa !important;
+        }
+        .bg-base-200 {
+            background: #23272b !important;
+        }
+        .rounded-2xl {
+            border-radius: 1rem;
+        }
+        .shadow-xl {
+            box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+        }
+        .input, .input-bordered {
+            background: #495057;
+            color: #f8f9fa;
+            border: 1px solid #6c757d;
+            box-shadow: none;
+        }
+        .input:focus {
+            border-color: #3366ff;
+            outline: none;
+            background: #495057;
+            color: #fff;
+        }
+        .btn {
+            border: none;
+            border-radius: 0.3rem;
+            font-weight: 600;
+            transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+        }
+        .btn-primary {
+            background: #3366ff;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #254eda;
+            color: #fff;
+        }
+        .btn-success {
+            background: #28a745;
+            color: #fff;
+        }
+        .btn-success:hover {
+            background: #218838;
+            color: #fff;
+        }
+        .btn-error, .btn-danger {
+            background: #e74c3c;
+            color: #fff;
+        }
+        .btn-error:hover, .btn-danger:hover {
+            background: #c0392b;
+            color: #fff;
+        }
+        .btn-warning {
+            background: #ff9800;
+            color: #fff;
+        }
+        .btn-warning:hover {
+            background: #e68900;
+            color: #fff;
+        }
+        .btn-secondary, .btn-ghost {
+            background: #6c757d;
+            color: #fff;
+        }
+        .btn-secondary:hover, .btn-ghost:hover {
+            background: #565e64;
+            color: #fff;
+        }
+        .text-primary {
+            color: #f8f9fa !important;
+        }
+        .text-base-content {
+            color: #dee2e6 !important;
+        }
+        .hover\:bg-base-200:hover {
+            background: #23272b !important;
+        }
+        .table th {
+            background: #23272b !important;
+            color: #f8f9fa !important;
+        }
+        .table tr:hover {
+            background: #495057 !important;
+        }
+        .badge.bg-success {
+            background: #28a745 !important;
+            color: #fff !important;
+        }
     </style>
 </head>
-<body data-theme="dracula" class="bg-base-200 min-h-screen">
+<body data-theme="dark" class="bg-base-200 min-h-screen">
     <div class="max-w-3xl mx-auto py-4 px-4">
         <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-center text-primary tracking-tight">대장길드 랜덤 뽑기</h1>
